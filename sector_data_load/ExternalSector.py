@@ -17,11 +17,12 @@ st.markdown("""
 # -----------------------------
 # Data directory
 # -----------------------------
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "Price Changes")
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "External Sector")
 CSV_FILES = {
-    "Annual CPI": "CPIAnnual.csv",
-    "National Salary & Wage Index": "NationalSalaryandWageIndex.csv",
-    "National Wholesale Price Index": "NationalWholesalePriceIndex.csv"
+    "Exports": "Exports.csv",
+    "Imports": "Imports.csv",
+    "Foreign Employment": "ForeignEmploymentCount.csv",
+    "USD Conversion Rates": "USDConversionRates.csv"
 }
 
 # -----------------------------
@@ -30,40 +31,33 @@ CSV_FILES = {
 def load_csv(child_name):
     file_path = os.path.join(DATA_DIR, CSV_FILES[child_name])
     
-    if child_name == "Annual CPI":
+    # Handle files with multi-line headers or S.N. columns
+    if child_name in ["Exports", "Imports", "Foreign Employment"]:
         df = pd.read_csv(file_path)
-        # Handle empty meta row if exists
-        if df.iloc[0].isna().all():
+        # Drop S.N. column if it exists
+        if 'S.N.' in df.columns:
+            df = df.drop(columns=['S.N.'])
+        elif 'S.No.' in df.columns:
+            df = df.drop(columns=['S.No.'])
+        
+        # Skip the meta-data row (like "Annual, Annual") if present
+        if df.iloc[0].isna().any() or (df.iloc[0] == "Annual").any():
             df = df.iloc[1:].reset_index(drop=True)
+            
         category_col = df.columns[0]
-        # Melt only year columns
-        year_cols = [col for col in df.columns if any(yr in col for yr in ["2022", "2023", "2024", "2025"])]
-        df_long = df.melt(id_vars=[category_col], value_vars=year_cols, var_name='Year', value_name='Value')
+        df_long = df.melt(id_vars=[category_col], var_name='Year', value_name='Value')
         df_long.rename(columns={category_col: "Category"}, inplace=True)
         
-    elif child_name == "National Salary & Wage Index":
-        df = pd.read_csv(file_path)
-        category_col = df.columns[0]
-        # Year columns
-        year_cols = [col for col in df.columns if any(yr in col for yr in ["2022", "2023", "2024", "2025"]) and "%" not in col]
-        df_long = df.melt(id_vars=[category_col], value_vars=year_cols, var_name='Year', value_name='Value')
-        df_long.rename(columns={category_col: "Category"}, inplace=True)
-        
-    elif child_name == "National Wholesale Price Index":
-        df = pd.read_csv(file_path, skiprows=0)
-        # Handle potential empty row at index 0 (line 2 in raw)
-        if df.iloc[0].isna().all():
-            df = df.iloc[1:].reset_index(drop=True)
-        category_col = df.columns[0]
-        # Year columns
-        year_cols = [col for col in df.columns if any(yr in col for yr in ["2020", "2021", "2022", "2023", "2024", "2025"])]
-        df_long = df.melt(id_vars=[category_col], value_vars=year_cols, var_name='Year', value_name='Value')
-        df_long.rename(columns={category_col: "Category"}, inplace=True)
+    else: # USD Conversion Rates
+        df = pd.read_csv(file_path, skiprows=1)
+        # headers are Buying, Selling, Middle. First col is Year.
+        df.columns = [col.strip() if 'Unnamed' not in col else 'Year' for col in df.columns]
+        df_long = df.melt(id_vars=['Year'], var_name='Category', value_name='Value')
+        # Remove 'Middle' category as requested
+        df_long = df_long[df_long['Category'] != 'Middle']
 
     # Clean numbers
-    # Handle '-' or empty strings as 0 or NaN
-    df_long['Value'] = df_long['Value'].astype(str).str.replace(",", "").str.replace("–", "").str.replace("-", "").str.strip()
-    df_long['Value'] = pd.to_numeric(df_long['Value'], errors='coerce')
+    df_long['Value'] = pd.to_numeric(df_long['Value'].astype(str).str.replace(",", ""), errors='coerce')
     df_long = df_long.dropna(subset=['Value'])
     return df_long
 
@@ -77,9 +71,11 @@ def show_graph(df, category=None):
     
     try:
         if category:
+            # Filter for one category, pivot to get Year as index
             chart_data = df[df['Category'] == category].set_index('Year')[['Value']]
             chart_data.columns = [category]
         else:
+            # Pivot all sectors: Year as index, Categories as columns
             chart_data = df.pivot(index='Year', columns='Category', values='Value')
             
         st.line_chart(chart_data, use_container_width=True)
@@ -100,10 +96,6 @@ def regression_projection(df, category):
     years = df_cat['Year'].tolist()
     x_indices = list(range(len(y_values)))
 
-    if len(x_indices) < 2:
-        st.info("Not enough historical data points to run regression.")
-        return
-
     # Calculate regression
     slope, intercept, r_value, p_value, std_err = stats.linregress(x_indices, y_values)
     
@@ -115,18 +107,19 @@ def regression_projection(df, category):
     # Projection for next step
     next_x = len(x_indices)
     next_val = slope * next_x + intercept
-    col2.write(f"**Projected value for next period:** {next_val:,.2f}")
+    col2.write(f"**Projected value for next step:** {next_val:,.2f}")
 
     # Chart
     fig, ax = plt.subplots(figsize=(12, 6))
     ax.plot(years, y_values, 'bo', label='Actual Data', markersize=8)
     ax.plot(years, [slope * i + intercept for i in x_indices], 'r-', label='Trend Line', linewidth=2)
     
+    # Add the projection point (green dot)
     next_year = "Next Period" 
     ax.plot(next_year, next_val, 'go', markersize=12, label='Projection')
     
     ax.set_title(f"Regression & Projection: {category}", fontsize=14)
-    ax.set_ylabel("Index Value")
+    ax.set_ylabel("Value")
     plt.xticks(rotation=45)
     ax.grid(True, linestyle='--', alpha=0.6)
     ax.legend()
@@ -170,7 +163,7 @@ def child_buttons(df):
     with col_sel:
         selected_category = st.selectbox("Select Category for In-depth Tools", categories)
     with col_btn:
-        st.write(" ") 
+        st.write(" ") # alignment spacer
         run_reg = st.button("Run Regression", use_container_width=True)
 
     if run_reg:
@@ -183,39 +176,47 @@ def child_buttons(df):
 # -----------------------------
 # Child pages
 # -----------------------------
-def annual_cpi():
-    st.header("Annual Consumer Price Index (CPI)")
-    df = load_csv("Annual CPI")
+def exports():
+    st.header("Exports Analysis")
+    df = load_csv("Exports")
     child_buttons(df)
 
-def salary_wage_index():
-    st.header("National Salary and Wage Index")
-    df = load_csv("National Salary & Wage Index")
+def imports():
+    st.header("Imports Analysis")
+    df = load_csv("Imports")
     child_buttons(df)
 
-def wholesale_price_index():
-    st.header("National Wholesale Price Index")
-    df = load_csv("National Wholesale Price Index")
+def foreign_employment():
+    st.header("Foreign Employment Count")
+    df = load_csv("Foreign Employment")
+    child_buttons(df)
+
+
+
+def usd_rates():
+    st.header("USD Conversion Rates")
+    df = load_csv("USD Conversion Rates")
     child_buttons(df)
 
 # -----------------------------
-# Main PriceChanges logic
+# Main ExternalSector
 # -----------------------------
-def PriceChanges():
-    st.title("Price Changes Dashboard")
+def ExternalSector():
+    st.title("External Sector Dashboard")
     children = {
-        "Consumer Price Index (CPI)": annual_cpi,
-        "Salary & Wage Index": salary_wage_index,
-        "Wholesale Price Index": wholesale_price_index
+        "Exports": exports,
+        "Imports": imports,
+        "Foreign Employment": foreign_employment,
+        "USD Conversion Rates": usd_rates
     }
 
-    if "price_changes_child" not in st.session_state:
-        st.session_state.price_changes_child = "Consumer Price Index (CPI)"
+    if "external_sector_child" not in st.session_state:
+        st.session_state.external_sector_child = "Exports"
 
     child = st.sidebar.selectbox(
         "Select Data Category",
         list(children.keys()),
-        index=list(children.keys()).index(st.session_state.price_changes_child)
+        index=list(children.keys()).index(st.session_state.external_sector_child)
     )
-    st.session_state.price_changes_child = child
+    st.session_state.external_sector_child = child
     children[child]()
