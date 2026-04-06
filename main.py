@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt
 from scipy import stats
 import re
 
-from sector_data_load import RealSector, ExternalSector, PriceChanges, PublicFinances
+from sector_data_load import RealSector, ExternalSector, PriceChanges, PublicFinances, NepseLive
+from streamlit_option_menu import option_menu
 
 st.set_page_config(layout="wide", initial_sidebar_state="collapsed")
 
@@ -52,8 +53,20 @@ if st.session_state.show_intro:
             st.rerun()
 else:
 
-
-    parent = st.sidebar.selectbox("Select Macroeconomic Sector", ["Real Sector", "External Sector", "Price Changes", "Public Finances"])
+    with st.sidebar:
+        parent = option_menu(
+            menu_title="Archive Index",
+            options=["Real Sector", "External Sector", "Price Changes", "Public Finances", "Live Stock Market (NEPSE)"],
+            icons=['building', 'globe', 'tag', 'bank', 'graph-up-arrow'],
+            menu_icon="archive",
+            default_index=0,
+            styles={
+                "container": {"padding": "5!important", "background-color": "#fdfbf7", "border-radius": "0px", "border": "1px solid #1c1c1c"},
+                "icon": {"color": "#1c1c1c", "font-size": "18px"}, 
+                "nav-link": {"font-family": "Courier New, Courier, monospace", "font-size": "15px", "text-align": "left", "margin":"0px", "--hover-color": "#f4f0ec", "color": "#1c1c1c", "border-radius": "0px"},
+                "nav-link-selected": {"background-color": "#1c1c1c", "color": "#fdfbf7", "font-weight": "bold"},
+            }
+        )
 
     if parent == "Real Sector":
         RealSector.RealSector()
@@ -63,3 +76,5 @@ else:
         PriceChanges.PriceChanges()
     elif parent == "Public Finances":
         PublicFinances.PublicFinances()
+    elif parent == "Live Stock Market (NEPSE)":
+        NepseLive.NepseLive()

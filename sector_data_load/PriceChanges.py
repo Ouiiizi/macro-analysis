@@ -89,13 +89,11 @@ def show_graph(df, category=None):
     st.subheader(f"📈 {title}")
 
     try:
-        if category:
-            chart_data = df[df['Category'] == category].set_index('Year')[['Value']]
-            chart_data.columns = [category]
-        else:
-            chart_data = df.pivot(index='Year', columns='Category', values='Value')
-
-        st.line_chart(chart_data, use_container_width=True)
+        import plotly.express as px
+        chart_data_filtered = df[df['Category'] == category] if category else df
+        fig = px.line(chart_data_filtered, x='Year', y='Value', color='Category', markers=True, template='simple_white')
+        fig.update_layout(yaxis_title="Value", xaxis_title="Year", hovermode="closest", margin=dict(l=20, r=20, t=10, b=20), showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
     except Exception as e:
         st.error(f"Could not render chart: {e}")
 
@@ -136,7 +134,7 @@ def regression_projection(df, category):
         title=f"Regression & Projection: {category}",
         yaxis_title="Index Value",
         xaxis_title="Year",
-        hovermode="x unified",
+        hovermode="closest",
         xaxis=dict(tickangle=-45)
     )
 
@@ -158,8 +156,11 @@ def child_buttons(df):
 
     if selected_sectors:
         try:
-            chart_data = df[df['Category'].isin(selected_sectors)].pivot(index='Year', columns='Category', values='Value')
-            st.line_chart(chart_data, use_container_width=True)
+            import plotly.express as px
+            chart_data_filtered = df[df['Category'].isin(selected_sectors)]
+            fig = px.line(chart_data_filtered, x='Year', y='Value', color='Category', markers=True, template='simple_white')
+            fig.update_layout(yaxis_title="Value", xaxis_title="Year", hovermode="closest", margin=dict(l=20, r=20, t=10, b=20), showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
             st.error(f"Error rendering chart: {e}")
     else:
@@ -167,7 +168,7 @@ def child_buttons(df):
 
     st.markdown("---")
 
-    st.subheader("🔍 Detailed Analysis")
+    st.subheader(" Detailed Analysis")
 
     col_sel, col_btn = st.columns([3, 1])
     with col_sel:
