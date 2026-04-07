@@ -190,7 +190,7 @@ def child_buttons(df):
 
     st.markdown("---")
 
-    st.subheader("🔍 Detailed Analysis")
+    st.subheader(" Detailed Analysis")
 
     col_sel, col_btn = st.columns([3, 1])
     with col_sel:
